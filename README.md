@@ -1,2 +1,3 @@
 # Inclusion
-Our inclusion proect
+speech-to-sign-language-translator
+sign-language-to-speech-translator

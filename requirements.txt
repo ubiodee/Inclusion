@@ -1,3 +1,7 @@
 requests==2.31.0
 pydub==0.25.1
 opencv-python==4.8.1.78
+# Optional but recommended for nicer audio handling (ffmpeg dependency)
+torch>=2.0.0
+transformers>=4.35.0
+pyttsx3>=2.90

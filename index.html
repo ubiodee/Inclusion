@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Sign Language to Speech</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    h1 { text-align: center; color: #38bdf8; margin-bottom: 0.5rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 1.5rem; }
+    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 700px) { .container { grid-template-columns: 1fr; } }
+    video, #preview {
+      width: 100%;
+      background: #1e293b;
+      border-radius: 12px;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+    }
+    #status {
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: #1e293b;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    #status.connected { background: #14532d; }
+    #status.error { background: #7f1d1d; }
+    #output {
+      min-height: 150px;
+      padding: 1rem;
+      background: #1e293b;
+      border-radius: 12px;
+      font-size: 1.25rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+      margin: 1rem 0;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #startBtn { background: #22c55e; color: white; }
+    #stopBtn { background: #ef4444; color: white; }
+    #clearBtn { background: #64748b; color: white; }
+    #speakToggle { background: #3b82f6; color: white; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .metrics {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 0.5rem;
+    }
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: #64748b;
+      font-size: 0.85rem;
+    }
+    a { color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <h1>🤟 Sign Language → Speech</h1>
+  <p class="subtitle">Real-time sign language recognition with spoken output</p>
+
+  <div id="status">Click "Start Camera" to begin</div>
+
+  <div class="container">
+    <div>
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+    <div>
+      <div id="output">Recognized text will appear here…</div>
+      <div class="metrics" id="metrics"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="startBtn">Start Camera</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <button id="clearBtn">Clear Text</button>
+    <button id="speakToggle">Speech: ON</button>
+  </div>
+
+  <footer>
+    Powered by <a href="https://huggingface.co/spaces/Remostartdev/realtime_signlanguage" target="_blank">Remostartdev/realtime_signlanguage</a> on Hugging Face
+  </footer>
+
+  <script>
+    const WS_URL = "wss://remostartdev-realtime-signlanguage.hf.space/ws";
+    const TARGET_FPS = 8;          // Adjust if needed (try 5–12)
+    const JPEG_QUALITY = 0.6;
+    const FRAME_WIDTH = 480;
+    const FRAME_HEIGHT = 360;
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const outputEl = document.getElementById("output");
+    const metricsEl = document.getElementById("metrics");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const speakToggle = document.getElementById("speakToggle");
+
+    let ws = null;
+    let stream = null;
+    let captureInterval = null;
+    let speechEnabled = true;
+    let lastSpoken = "";
+    let accumulatedText = "";
+
+    function setStatus(msg, type = "") {
+      statusEl.textContent = msg;
+      statusEl.className = type;
+    }
+
+    function speak(text) {
+      if (!speechEnabled || !text || text.trim() === lastSpoken) return;
+      lastSpoken = text.trim();
+
+      // Cancel any ongoing speech for smoother experience
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.lang = "en-US";
+
+      // Prefer a natural voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v => v.lang.startsWith("en") && v.name.includes("Natural")) 
+                     || voices.find(v => v.lang.startsWith("en"));
+      if (preferred) utterance.voice = preferred;
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Preload voices
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {};
+    }
+
+    function captureAndSend() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !video.videoWidth) return;
+
+      canvas.width = FRAME_WIDTH;
+      canvas.height = FRAME_HEIGHT;
+      ctx.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+      canvas.toBlob(blob => {
+        if (blob && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(blob);
+        }
+      }, "image/jpeg", JPEG_QUALITY);
+    }
+
+    function connectWS() {
+      setStatus("Connecting to sign language model…");
+      ws = new WebSocket(WS_URL);
+      ws.binaryType = "blob";
+
+      ws.onopen = () => {
+        setStatus("Connected! Start signing…", "connected");
+        captureInterval = setInterval(captureAndSend, 1000 / TARGET_FPS);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "segment" && data.text) {
+            const newText = data.text.trim();
+            if (newText) {
+              accumulatedText += (accumulatedText ? " " : "") + newText;
+              outputEl.textContent = accumulatedText;
+              speak(newText);
+
+              metricsEl.textContent = `Last segment: ${data.num_frames} frames | DINO: ${data.dino_batch_ms?.toFixed(0)}ms | Trans: ${data.translation_ms?.toFixed(0)}ms`;
+            }
+          } else if (data.type === "error") {
+            setStatus("Model error: " + data.message, "error");
+          }
+        } catch (e) {
+          console.warn("Non-JSON message received", e);
+        }
+      };
+
+      ws.onerror = () => {
+        setStatus("WebSocket error — check console or try again", "error");
+      };
+
+      ws.onclose = () => {
+        setStatus("Disconnected from model");
+        if (captureInterval) clearInterval(captureInterval);
+      };
+    }
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+          audio: false
+        });
+        video.srcObject = stream;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        connectWS();
+      } catch (err) {
+        setStatus("Camera access denied: " + err.message, "error");
+        console.error(err);
+      }
+    }
+
+    function stopAll() {
+      if (captureInterval) clearInterval(captureInterval);
+      if (ws) ws.close();
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus("Stopped");
+      window.speechSynthesis.cancel();
+    }
+
+    startBtn.addEventListener("click", startCamera);
+    stopBtn.addEventListener("click", stopAll);
+    clearBtn.addEventListener("click", () => {
+      accumulatedText = "";
+      outputEl.textContent = "Recognized text will appear here…";
+      lastSpoken = "";
+      metricsEl.textContent = "";
+    });
+    speakToggle.addEventListener("click", () => {
+      speechEnabled = !speechEnabled;
+      speakToggle.textContent = `Speech: ${speechEnabled ? "ON" : "OFF"}`;
+      if (!speechEnabled) window.speechSynthesis.cancel();
+    });
+
+    // Cleanup on page unload
+    window.addEventListener("beforeunload", stopAll);
+  </script>
+</body>
+</html>

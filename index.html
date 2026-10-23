@@ -293,7 +293,7 @@
       if (!speechEnabled) window.speechSynthesis.cancel();
     };
 
-    // ========== SPEECH TO SIGN (FIXED) ==========
+    // ========== SPEECH TO SIGN (ANTI-FREEZE) ==========
     const textInput = document.getElementById("textInput");
     const listenBtn = document.getElementById("listenBtn");
     const signBtn = document.getElementById("signBtn");
@@ -308,7 +308,7 @@
       recognition = new SpeechRecognition();
       recognition.lang = "en-US";
       recognition.interimResults = true;
-      recognition.continuous = false;   // important: one utterance at a time
+      recognition.continuous = false;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
@@ -319,26 +319,23 @@
       };
 
       recognition.onresult = (event) => {
-        let interim = "";
         let final = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            final += transcript;
-          } else {
-            interim += transcript;
+            final += event.results[i][0].transcript;
           }
         }
-        textInput.value = final || interim;
         if (final) {
-          speechStatus.textContent = "Got it!";
-          signText(final);
+          textInput.value = final;
+          speechStatus.textContent = "Got it — signing…";
+          // Delay signing so recognition can fully finish first
+          setTimeout(() => safeSign(final), 300);
         }
       };
 
       recognition.onerror = (event) => {
         console.error("Speech error:", event.error);
-        speechStatus.textContent = "Error: " + event.error;
+        speechStatus.textContent = "Mic error: " + event.error;
         stopListening();
       };
 
@@ -348,16 +345,12 @@
     } else {
       listenBtn.disabled = true;
       listenBtn.textContent = "Speech not supported";
-      speechStatus.textContent = "Use Chrome or Edge";
     }
 
     function stopListening() {
       isListening = false;
       listenBtn.textContent = "🎤 Speak";
       listenBtn.classList.remove("listening");
-      if (speechStatus.textContent === "Listening…") {
-        speechStatus.textContent = "";
-      }
     }
 
     listenBtn.onclick = () => {
@@ -368,33 +361,43 @@
         try {
           recognition.start();
         } catch (e) {
-          console.error("Could not start recognition:", e);
           speechStatus.textContent = "Could not start mic";
         }
       }
     };
 
-    signBtn.onclick = () => signText(textInput.value);
+    signBtn.onclick = () => safeSign(textInput.value);
     textInput.onkeydown = (e) => {
-      if (e.key === "Enter") signText(textInput.value);
+      if (e.key === "Enter") safeSign(textInput.value);
     };
 
-    async function signText(text) {
-      if (!text || !text.trim() || !avatar) return;
-      speechStatus.textContent = "Signing…";
-      try {
-        if (typeof avatar.sign === "function") {
-          await avatar.sign(text.trim());
-          speechStatus.textContent = "Done";
-          setTimeout(() => { if (speechStatus.textContent === "Done") speechStatus.textContent = ""; }, 2000);
-        } else {
-          speechStatus.textContent = "Avatar not ready";
-          setTimeout(() => signText(text), 800);
+    // Safer signing that won't freeze the page
+    function safeSign(text) {
+      if (!text || !text.trim()) return;
+      const clean = text.trim();
+
+      // Run outside the current call stack so the UI stays responsive
+      setTimeout(async () => {
+        if (!avatar) {
+          speechStatus.textContent = "Avatar missing";
+          return;
         }
-      } catch (err) {
-        console.error("Sign error:", err);
-        speechStatus.textContent = "Sign failed";
-      }
+        if (typeof avatar.sign !== "function") {
+          speechStatus.textContent = "Avatar still loading…";
+          return;
+        }
+        try {
+          speechStatus.textContent = "Signing…";
+          await avatar.sign(clean);
+          speechStatus.textContent = "Done";
+          setTimeout(() => {
+            if (speechStatus.textContent === "Done") speechStatus.textContent = "";
+          }, 2000);
+        } catch (err) {
+          console.error("Sign failed:", err);
+          speechStatus.textContent = "Could not sign (avatar busy)";
+        }
+      }, 100);
     }
 
     window.addEventListener("beforeunload", stopAll);

@@ -90,11 +90,14 @@
       display: flex;
       justify-content: center;
       margin: 1rem 0;
+      min-height: 520px;
     }
     agent-3d {
       border-radius: 12px;
       overflow: hidden;
       background: #1e293b;
+      width: 420px;
+      height: 520px;
     }
   </style>
 </head>
@@ -107,7 +110,7 @@
     <button class="tab" data-tab="speech-to-sign">Speech → Sign</button>
   </div>
 
-  <!-- ========== SIGN TO SPEECH ========== -->
+  <!-- SIGN TO SPEECH -->
   <div id="sign-to-speech" class="panel active">
     <div id="status">Click "Start Camera" to begin</div>
     <div class="container">
@@ -128,7 +131,7 @@
     </div>
   </div>
 
-  <!-- ========== SPEECH TO SIGN ========== -->
+  <!-- SPEECH TO SIGN -->
   <div id="speech-to-sign" class="panel">
     <div class="controls">
       <button id="listenBtn">🎤 Speak</button>
@@ -136,15 +139,17 @@
       <button id="signBtn">Sign</button>
     </div>
     <div id="avatar-container">
+      <!-- Correct modern embed -->
       <agent-3d
         body="https://three.ws/avatars/default.glb"
         sign-language
-        style="width: 420px; height: 520px; display: block;">
+        style="width:420px;height:520px;display:block;">
       </agent-3d>
     </div>
   </div>
 
-  <script src="https://three.ws/embed.js"></script>
+  <!-- Correct script for the current agent-3d component -->
+  <script type="module" src="https://three.ws/agent-3d/latest/agent-3d.js"></script>
 
   <script>
     // ========== TABS ==========
@@ -308,13 +313,18 @@
     signBtn.onclick = () => signText(textInput.value);
     textInput.onkeydown = (e) => { if (e.key === "Enter") signText(textInput.value); };
 
-    function signText(text) {
-      if (!text || !text.trim()) return;
-      if (avatar && typeof avatar.sign === "function") {
-        avatar.sign(text);
-      } else if (avatar) {
-        avatar.setAttribute("sign-text", text);
-        avatar.dispatchEvent(new CustomEvent("sign", { detail: text }));
+    async function signText(text) {
+      if (!text || !text.trim() || !avatar) return;
+      try {
+        // Official method from three.ws docs
+        if (typeof avatar.sign === "function") {
+          await avatar.sign(text);
+        } else {
+          console.log("sign() not ready yet, retrying...");
+          setTimeout(() => signText(text), 500);
+        }
+      } catch (err) {
+        console.error("Sign error:", err);
       }
     }
 

@@ -66,6 +66,7 @@
       gap: 0.6rem;
       margin: 1rem 0;
       flex-wrap: wrap;
+      align-items: center;
     }
     button, input {
       padding: 0.6rem 1rem;
@@ -75,6 +76,7 @@
     }
     button { cursor: pointer; font-weight: 600; color: white; }
     #startBtn, #listenBtn { background: #22c55e; }
+    #listenBtn.listening { background: #ef4444; }
     #stopBtn { background: #ef4444; }
     #clearBtn, #speakToggle { background: #64748b; }
     #signBtn { background: #3b82f6; }
@@ -98,6 +100,11 @@
       background: #1e293b;
       width: 420px;
       height: 520px;
+    }
+    #speechStatus {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-left: 0.5rem;
     }
   </style>
 </head>
@@ -135,11 +142,11 @@
   <div id="speech-to-sign" class="panel">
     <div class="controls">
       <button id="listenBtn">🎤 Speak</button>
+      <span id="speechStatus"></span>
       <input id="textInput" type="text" placeholder="Or type text here..." />
       <button id="signBtn">Sign</button>
     </div>
     <div id="avatar-container">
-      <!-- Correct modern embed -->
       <agent-3d
         body="https://three.ws/avatars/default.glb"
         sign-language
@@ -148,7 +155,6 @@
     </div>
   </div>
 
-  <!-- Correct script for the current agent-3d component -->
   <script type="module" src="https://three.ws/agent-3d/latest/agent-3d.js"></script>
 
   <script>
@@ -287,44 +293,107 @@
       if (!speechEnabled) window.speechSynthesis.cancel();
     };
 
-    // ========== SPEECH TO SIGN ==========
+    // ========== SPEECH TO SIGN (FIXED) ==========
     const textInput = document.getElementById("textInput");
     const listenBtn = document.getElementById("listenBtn");
     const signBtn = document.getElementById("signBtn");
+    const speechStatus = document.getElementById("speechStatus");
     const avatar = document.querySelector("agent-3d");
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
+    let isListening = false;
 
     if (SpeechRecognition) {
       recognition = new SpeechRecognition();
       recognition.lang = "en-US";
-      recognition.onresult = (e) => {
-        const text = e.results[0][0].transcript;
-        textInput.value = text;
-        signText(text);
+      recognition.interimResults = true;
+      recognition.continuous = false;   // important: one utterance at a time
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isListening = true;
+        listenBtn.textContent = "⏹ Stop";
+        listenBtn.classList.add("listening");
+        speechStatus.textContent = "Listening…";
+      };
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        let final = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            final += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+        textInput.value = final || interim;
+        if (final) {
+          speechStatus.textContent = "Got it!";
+          signText(final);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech error:", event.error);
+        speechStatus.textContent = "Error: " + event.error;
+        stopListening();
+      };
+
+      recognition.onend = () => {
+        stopListening();
       };
     } else {
       listenBtn.disabled = true;
       listenBtn.textContent = "Speech not supported";
+      speechStatus.textContent = "Use Chrome or Edge";
     }
 
-    listenBtn.onclick = () => recognition && recognition.start();
+    function stopListening() {
+      isListening = false;
+      listenBtn.textContent = "🎤 Speak";
+      listenBtn.classList.remove("listening");
+      if (speechStatus.textContent === "Listening…") {
+        speechStatus.textContent = "";
+      }
+    }
+
+    listenBtn.onclick = () => {
+      if (!recognition) return;
+      if (isListening) {
+        recognition.stop();
+      } else {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error("Could not start recognition:", e);
+          speechStatus.textContent = "Could not start mic";
+        }
+      }
+    };
+
     signBtn.onclick = () => signText(textInput.value);
-    textInput.onkeydown = (e) => { if (e.key === "Enter") signText(textInput.value); };
+    textInput.onkeydown = (e) => {
+      if (e.key === "Enter") signText(textInput.value);
+    };
 
     async function signText(text) {
       if (!text || !text.trim() || !avatar) return;
+      speechStatus.textContent = "Signing…";
       try {
-        // Official method from three.ws docs
         if (typeof avatar.sign === "function") {
-          await avatar.sign(text);
+          await avatar.sign(text.trim());
+          speechStatus.textContent = "Done";
+          setTimeout(() => { if (speechStatus.textContent === "Done") speechStatus.textContent = ""; }, 2000);
         } else {
-          console.log("sign() not ready yet, retrying...");
-          setTimeout(() => signText(text), 500);
+          speechStatus.textContent = "Avatar not ready";
+          setTimeout(() => signText(text), 800);
         }
       } catch (err) {
         console.error("Sign error:", err);
+        speechStatus.textContent = "Sign failed";
       }
     }
 

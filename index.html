@@ -3,22 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-Time Sign Language to Speech</title>
+  <title>Inclusion – Sign Language Tools</title>
   <style>
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      max-width: 900px;
+      max-width: 1100px;
       margin: 0 auto;
       padding: 1.5rem;
       background: #0f172a;
       color: #e2e8f0;
     }
-    h1 { text-align: center; color: #38bdf8; margin-bottom: 0.5rem; }
+    h1 { text-align: center; color: #38bdf8; margin-bottom: 0.25rem; }
     .subtitle { text-align: center; color: #94a3b8; margin-bottom: 1.5rem; }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      justify-content: center;
+    }
+    .tab {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      background: #1e293b;
+      color: #e2e8f0;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab.active { background: #3b82f6; }
+    .panel { display: none; }
+    .panel.active { display: block; }
     .container { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-    @media (max-width: 700px) { .container { grid-template-columns: 1fr; } }
-    video, #preview {
+    @media (max-width: 800px) { .container { grid-template-columns: 1fr; } }
+    video {
       width: 100%;
       background: #1e293b;
       border-radius: 12px;
@@ -35,78 +53,113 @@
     #status.connected { background: #14532d; }
     #status.error { background: #7f1d1d; }
     #output {
-      min-height: 150px;
+      min-height: 140px;
       padding: 1rem;
       background: #1e293b;
       border-radius: 12px;
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       line-height: 1.6;
       white-space: pre-wrap;
     }
     .controls {
       display: flex;
-      gap: 0.75rem;
+      gap: 0.6rem;
       margin: 1rem 0;
       flex-wrap: wrap;
     }
-    button {
-      padding: 0.6rem 1.2rem;
+    button, input {
+      padding: 0.6rem 1rem;
       border: none;
       border-radius: 8px;
       font-size: 1rem;
-      cursor: pointer;
-      font-weight: 600;
     }
-    #startBtn { background: #22c55e; color: white; }
-    #stopBtn { background: #ef4444; color: white; }
-    #clearBtn { background: #64748b; color: white; }
-    #speakToggle { background: #3b82f6; color: white; }
+    button { cursor: pointer; font-weight: 600; color: white; }
+    #startBtn, #listenBtn { background: #22c55e; }
+    #stopBtn { background: #ef4444; }
+    #clearBtn, #speakToggle { background: #64748b; }
+    #signBtn { background: #3b82f6; }
+    input {
+      flex: 1;
+      min-width: 180px;
+      background: #1e293b;
+      color: #e2e8f0;
+    }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .metrics {
-      font-size: 0.8rem;
-      color: #94a3b8;
-      margin-top: 0.5rem;
+    .metrics { font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem; }
+    #avatar-container {
+      display: flex;
+      justify-content: center;
+      margin: 1rem 0;
     }
-    footer {
-      text-align: center;
-      margin-top: 2rem;
-      color: #64748b;
-      font-size: 0.85rem;
+    agent-3d {
+      border-radius: 12px;
+      overflow: hidden;
+      background: #1e293b;
     }
-    a { color: #38bdf8; }
   </style>
 </head>
 <body>
-  <h1>🤟 Sign Language → Speech</h1>
-  <p class="subtitle">Real-time sign language recognition with spoken output</p>
+  <h1>Inclusion</h1>
+  <p class="subtitle">Sign Language ↔ Speech</p>
 
-  <div id="status">Click "Start Camera" to begin</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="sign-to-speech">Sign → Speech</button>
+    <button class="tab" data-tab="speech-to-sign">Speech → Sign</button>
+  </div>
 
-  <div class="container">
-    <div>
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="canvas" style="display:none;"></canvas>
+  <!-- ========== SIGN TO SPEECH ========== -->
+  <div id="sign-to-speech" class="panel active">
+    <div id="status">Click "Start Camera" to begin</div>
+    <div class="container">
+      <div>
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+      </div>
+      <div>
+        <div id="output">Recognized text will appear here…</div>
+        <div class="metrics" id="metrics"></div>
+      </div>
     </div>
-    <div>
-      <div id="output">Recognized text will appear here…</div>
-      <div class="metrics" id="metrics"></div>
+    <div class="controls">
+      <button id="startBtn">Start Camera</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <button id="clearBtn">Clear Text</button>
+      <button id="speakToggle">Speech: ON</button>
     </div>
   </div>
 
-  <div class="controls">
-    <button id="startBtn">Start Camera</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="clearBtn">Clear Text</button>
-    <button id="speakToggle">Speech: ON</button>
+  <!-- ========== SPEECH TO SIGN ========== -->
+  <div id="speech-to-sign" class="panel">
+    <div class="controls">
+      <button id="listenBtn">🎤 Speak</button>
+      <input id="textInput" type="text" placeholder="Or type text here..." />
+      <button id="signBtn">Sign</button>
+    </div>
+    <div id="avatar-container">
+      <agent-3d
+        body="https://three.ws/avatars/default.glb"
+        sign-language
+        style="width: 420px; height: 520px; display: block;">
+      </agent-3d>
+    </div>
   </div>
 
-  <footer>
-    Powered by <a href="https://huggingface.co/spaces/Remostartdev/realtime_signlanguage" target="_blank">Remostartdev/realtime_signlanguage</a> on Hugging Face
-  </footer>
+  <script src="https://three.ws/embed.js"></script>
 
   <script>
+    // ========== TABS ==========
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.tab).classList.add("active");
+      });
+    });
+
+    // ========== SIGN TO SPEECH ==========
     const WS_URL = "wss://remostartdev-realtime-signlanguage.hf.space/ws";
-    const TARGET_FPS = 8;          // Adjust if needed (try 5–12)
+    const TARGET_FPS = 8;
     const JPEG_QUALITY = 0.6;
     const FRAME_WIDTH = 480;
     const FRAME_HEIGHT = 360;
@@ -137,36 +190,18 @@
     function speak(text) {
       if (!speechEnabled || !text || text.trim() === lastSpoken) return;
       lastSpoken = text.trim();
-
-      // Cancel any ongoing speech for smoother experience
       window.speechSynthesis.cancel();
-
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
-      utterance.pitch = 1.0;
       utterance.lang = "en-US";
-
-      // Prefer a natural voice if available
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(v => v.lang.startsWith("en") && v.name.includes("Natural")) 
-                     || voices.find(v => v.lang.startsWith("en"));
-      if (preferred) utterance.voice = preferred;
-
       window.speechSynthesis.speak(utterance);
-    }
-
-    // Preload voices
-    if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => {};
     }
 
     function captureAndSend() {
       if (!ws || ws.readyState !== WebSocket.OPEN || !video.videoWidth) return;
-
       canvas.width = FRAME_WIDTH;
       canvas.height = FRAME_HEIGHT;
       ctx.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-
       canvas.toBlob(blob => {
         if (blob && ws && ws.readyState === WebSocket.OPEN) {
           ws.send(blob);
@@ -175,15 +210,13 @@
     }
 
     function connectWS() {
-      setStatus("Connecting to sign language model…");
+      setStatus("Connecting…");
       ws = new WebSocket(WS_URL);
       ws.binaryType = "blob";
-
       ws.onopen = () => {
         setStatus("Connected! Start signing…", "connected");
         captureInterval = setInterval(captureAndSend, 1000 / TARGET_FPS);
       };
-
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -193,23 +226,18 @@
               accumulatedText += (accumulatedText ? " " : "") + newText;
               outputEl.textContent = accumulatedText;
               speak(newText);
-
-              metricsEl.textContent = `Last segment: ${data.num_frames} frames | DINO: ${data.dino_batch_ms?.toFixed(0)}ms | Trans: ${data.translation_ms?.toFixed(0)}ms`;
+              metricsEl.textContent = `Frames: ${data.num_frames} | DINO: ${data.dino_batch_ms?.toFixed(0)}ms | Trans: ${data.translation_ms?.toFixed(0)}ms`;
             }
           } else if (data.type === "error") {
-            setStatus("Model error: " + data.message, "error");
+            setStatus("Error: " + data.message, "error");
           }
         } catch (e) {
-          console.warn("Non-JSON message received", e);
+          console.warn("Non-JSON message", e);
         }
       };
-
-      ws.onerror = () => {
-        setStatus("WebSocket error — check console or try again", "error");
-      };
-
+      ws.onerror = () => setStatus("Connection error", "error");
       ws.onclose = () => {
-        setStatus("Disconnected from model");
+        setStatus("Disconnected");
         if (captureInterval) clearInterval(captureInterval);
       };
     }
@@ -226,17 +254,13 @@
         connectWS();
       } catch (err) {
         setStatus("Camera access denied: " + err.message, "error");
-        console.error(err);
       }
     }
 
     function stopAll() {
       if (captureInterval) clearInterval(captureInterval);
       if (ws) ws.close();
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
+      if (stream) stream.getTracks().forEach(t => t.stop());
       video.srcObject = null;
       startBtn.disabled = false;
       stopBtn.disabled = true;
@@ -244,21 +268,56 @@
       window.speechSynthesis.cancel();
     }
 
-    startBtn.addEventListener("click", startCamera);
-    stopBtn.addEventListener("click", stopAll);
-    clearBtn.addEventListener("click", () => {
+    startBtn.onclick = startCamera;
+    stopBtn.onclick = stopAll;
+    clearBtn.onclick = () => {
       accumulatedText = "";
       outputEl.textContent = "Recognized text will appear here…";
       lastSpoken = "";
       metricsEl.textContent = "";
-    });
-    speakToggle.addEventListener("click", () => {
+    };
+    speakToggle.onclick = () => {
       speechEnabled = !speechEnabled;
       speakToggle.textContent = `Speech: ${speechEnabled ? "ON" : "OFF"}`;
       if (!speechEnabled) window.speechSynthesis.cancel();
-    });
+    };
 
-    // Cleanup on page unload
+    // ========== SPEECH TO SIGN ==========
+    const textInput = document.getElementById("textInput");
+    const listenBtn = document.getElementById("listenBtn");
+    const signBtn = document.getElementById("signBtn");
+    const avatar = document.querySelector("agent-3d");
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.onresult = (e) => {
+        const text = e.results[0][0].transcript;
+        textInput.value = text;
+        signText(text);
+      };
+    } else {
+      listenBtn.disabled = true;
+      listenBtn.textContent = "Speech not supported";
+    }
+
+    listenBtn.onclick = () => recognition && recognition.start();
+    signBtn.onclick = () => signText(textInput.value);
+    textInput.onkeydown = (e) => { if (e.key === "Enter") signText(textInput.value); };
+
+    function signText(text) {
+      if (!text || !text.trim()) return;
+      if (avatar && typeof avatar.sign === "function") {
+        avatar.sign(text);
+      } else if (avatar) {
+        avatar.setAttribute("sign-text", text);
+        avatar.dispatchEvent(new CustomEvent("sign", { detail: text }));
+      }
+    }
+
     window.addEventListener("beforeunload", stopAll);
   </script>
 </body>
